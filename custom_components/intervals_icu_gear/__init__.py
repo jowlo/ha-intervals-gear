@@ -20,6 +20,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    # Initialize hass.data for this domain
+    hass.data.setdefault(DOMAIN, {})
+
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
 
     async def async_equip_component_service(call):
@@ -65,7 +68,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             new_component_ids.append(component_id)
         # 5. PUT update
         await client.async_update_bike_components(bike_id, new_component_ids)
-        # Optionally: fire an event or log
+
+        # 6. Refresh coordinator data to update all entities
+        coordinator = hass.data[DOMAIN].get("coordinator")
+        if coordinator:
+            await coordinator.async_request_refresh()
+
+        # Fire event
         hass.bus.async_fire(f"{DOMAIN}_component_equipped", {
             "bike_id": bike_id,
             "component_ids": new_component_ids,
@@ -78,4 +87,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    hass.data.pop(DOMAIN, None)
     return await hass.config_entries.async_unload_platforms(entry, ["sensor"])

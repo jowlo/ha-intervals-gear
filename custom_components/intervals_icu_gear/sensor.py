@@ -97,6 +97,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         _LOGGER.error("Failed to fetch gear data from Intervals.icu API")
         raise ConfigEntryNotReady("Could not fetch gear data from Intervals.icu")
 
+    # Store coordinator in hass.data so the service can access it
+    hass.data[DOMAIN]["coordinator"] = coordinator
+
     entities = []
     gear_by_id = {g["id"]: g for g in coordinator.data}
 
