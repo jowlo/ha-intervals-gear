@@ -64,6 +64,7 @@ ICON_MAP = {
 
 DEFAULT_ICON = "mdi:cog"
 
+
 def get_icon_for_type(gear_type: str) -> str:
     """Get MDI icon for gear type."""
     return ICON_MAP.get(gear_type, DEFAULT_ICON)
@@ -101,14 +102,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     hass.data[DOMAIN]["coordinator"] = coordinator
 
     entities = []
-    gear_by_id = {g["id"]: g for g in coordinator.data}
-
-    # Track which components are attached to which gear
-    component_to_parent = {}
-    for gear in coordinator.data:
-        if not gear.get("component", False):
-            for comp_id in gear.get("component_ids") or []:
-                component_to_parent[comp_id] = gear
 
     for gear in coordinator.data:
         is_component = gear.get("component", False)
@@ -118,11 +111,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         if not is_component:
             # Create entity for main gear (bikes, shoes, etc.)
-            entities.append(IntervalsICUGearSensor(coordinator, gear, gear_by_id))
+            entities.append(IntervalsICUGearSensor(coordinator, gear))
         else:
             # Create entity for components (chains, tyres, cassettes, etc.)
-            parent_gear = component_to_parent.get(gear["id"])
-            entities.append(IntervalsICUComponentSensor(coordinator, gear, parent_gear))
+            entities.append(IntervalsICUComponentSensor(coordinator, gear))
 
     _LOGGER.info("Created %d Intervals.icu gear entities", len(entities))
     async_add_entities(entities)
@@ -134,21 +126,16 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.DISTANCE
     _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_has_entity_name = True
 
-    def __init__(self, coordinator, gear, gear_by_id):
+    def __init__(self, coordinator, gear):
         super().__init__(coordinator)
         self._gear_id = gear["id"]
         self._gear_type = gear.get("type", "Gear")
-        self._attr_name = f"{gear['name']} Mileage"
+        self._gear_name = gear.get("name", "Unknown")
         self._attr_unique_id = f"intervals_icu_gear_{gear['id']}"
         self._attr_icon = get_icon_for_type(self._gear_type)
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, gear["id"])},
-            "name": gear["name"],
-            "manufacturer": "Intervals.icu",
-            "model": self._gear_type,
-            "entry_type": DeviceEntryType.SERVICE,
-        }
+        self._attr_translation_key = "mileage"
 
     @property
     def _gear(self):
@@ -158,14 +145,43 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
                 return g
         return {}
 
+    def _get_equipped_components(self):
+        """Get list of components equipped to this gear."""
+        gear = self._gear
+        component_ids = gear.get("component_ids") or []
+        components = []
+        for g in self.coordinator.data or []:
+            if g["id"] in component_ids:
+                components.append({"id": g["id"], "name": g.get("name"), "type": g.get("type")})
+        return components
+
+    @property
+    def name(self):
+        """Return sensor name."""
+        return "Mileage"
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        gear = self._gear
+        return {
+            "identifiers": {(DOMAIN, self._gear_id)},
+            "name": gear.get("name", self._gear_name),
+            "manufacturer": "Intervals.icu",
+            "model": gear.get("type", self._gear_type),
+            "entry_type": DeviceEntryType.SERVICE,
+        }
+
     @property
     def extra_state_attributes(self):
         gear = self._gear
+        equipped = self._get_equipped_components()
         return {
             "gear_id": gear.get("id"),
             "gear_type": gear.get("type"),
             "activities": gear.get("activities"),
             "time_seconds": gear.get("time"),
+            "equipped_components": equipped,
         }
 
     @property
@@ -183,39 +199,16 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.DISTANCE
     _attr_state_class = SensorStateClass.TOTAL
     _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_has_entity_name = True
 
-    def __init__(self, coordinator, comp, parent_gear):
+    def __init__(self, coordinator, comp):
         super().__init__(coordinator)
         self._comp_id = comp["id"]
         self._comp_type = comp.get("type", "Component")
-        self._parent_gear_id = parent_gear["id"] if parent_gear else None
-
-        # Name includes parent gear if attached
-        if parent_gear:
-            self._attr_name = f"{parent_gear['name']} - {comp['name']} Mileage"
-        else:
-            self._attr_name = f"{comp['name']} Mileage"
-
+        self._comp_name = comp.get("name", "Unknown")
         self._attr_unique_id = f"intervals_icu_component_{comp['id']}"
         self._attr_icon = get_icon_for_type(self._comp_type)
-
-        # If attached to a parent, group under that device; otherwise create standalone device
-        if parent_gear:
-            self._attr_device_info = {
-                "identifiers": {(DOMAIN, parent_gear["id"])},
-                "name": parent_gear["name"],
-                "manufacturer": "Intervals.icu",
-                "model": parent_gear.get("type", "Gear"),
-                "entry_type": DeviceEntryType.SERVICE,
-            }
-        else:
-            self._attr_device_info = {
-                "identifiers": {(DOMAIN, comp["id"])},
-                "name": comp["name"],
-                "manufacturer": "Intervals.icu",
-                "model": self._comp_type,
-                "entry_type": DeviceEntryType.SERVICE,
-            }
+        self._attr_translation_key = "mileage"
 
     @property
     def _comp(self):
@@ -225,15 +218,44 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
                 return g
         return {}
 
+    def _get_equipped_on(self):
+        """Find which gear this component is currently equipped on."""
+        for g in self.coordinator.data or []:
+            if not g.get("component", False):
+                component_ids = g.get("component_ids") or []
+                if self._comp_id in component_ids:
+                    return {"id": g["id"], "name": g.get("name"), "type": g.get("type")}
+        return None
+
+    @property
+    def name(self):
+        """Return sensor name."""
+        return "Mileage"
+
+    @property
+    def device_info(self):
+        """Return device info - component is always its own device."""
+        comp = self._comp
+        return {
+            "identifiers": {(DOMAIN, self._comp_id)},
+            "name": comp.get("name", self._comp_name),
+            "manufacturer": "Intervals.icu",
+            "model": comp.get("type", self._comp_type),
+            "entry_type": DeviceEntryType.SERVICE,
+        }
+
     @property
     def extra_state_attributes(self):
         comp = self._comp
+        equipped_on = self._get_equipped_on()
         return {
             "gear_id": comp.get("id"),
             "component_type": comp.get("type"),
             "activities": comp.get("activities"),
             "time_seconds": comp.get("time"),
-            "parent_gear_id": self._parent_gear_id,
+            "equipped_on_id": equipped_on["id"] if equipped_on else None,
+            "equipped_on_name": equipped_on["name"] if equipped_on else None,
+            "equipped_on_type": equipped_on["type"] if equipped_on else None,
         }
 
     @property

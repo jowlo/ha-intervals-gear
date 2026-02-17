@@ -7,6 +7,9 @@ import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 from .const import CONF_API_KEY, CONF_ATHLETE_ID, DOMAIN
 from .api import IntervalsICUClient
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 EQUIP_SERVICE = "equip_component"
 
@@ -72,7 +75,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # 6. Refresh coordinator data to update all entities
         coordinator = hass.data[DOMAIN].get("coordinator")
         if coordinator:
-            await coordinator.async_request_refresh()
+            _LOGGER.info("Refreshing coordinator data after equipping component")
+            await coordinator.async_refresh()
+            _LOGGER.info("Coordinator refresh complete")
 
         # Fire event
         hass.bus.async_fire(f"{DOMAIN}_component_equipped", {
