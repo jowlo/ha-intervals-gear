@@ -10,6 +10,65 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
+# Map gear/component types to MDI icons
+ICON_MAP = {
+    # Main gear
+    "Bike": "mdi:bike",
+    "Shoes": "mdi:shoe-sneaker",
+    "Wetsuit": "mdi:diving-scuba-mask",
+    "RowingMachine": "mdi:rowing",
+    "Skis": "mdi:ski",
+    "Snowboard": "mdi:snowboard",
+    "Boat": "mdi:sail-boat",
+    "Board": "mdi:surfing",
+    "Equipment": "mdi:dumbbell",
+    # Components
+    "Chain": "mdi:link-variant",
+    "Cassette": "mdi:cog",
+    "Tyre": "mdi:tire",
+    "Wheel": "mdi:tire",
+    "Wheelset": "mdi:tire",
+    "Brake": "mdi:car-brake-hold",
+    "BrakePads": "mdi:car-brake-hold",
+    "Rotor": "mdi:circle-outline",
+    "Drivetrain": "mdi:cog-transfer",
+    "BottomBracket": "mdi:cog",
+    "Chainrings": "mdi:cog",
+    "Crankset": "mdi:cog",
+    "Derailleur": "mdi:cog-transfer",
+    "Pedals": "mdi:foot-print",
+    "Lever": "mdi:lever",
+    "Cable": "mdi:cable-data",
+    "Frame": "mdi:bike",
+    "Fork": "mdi:bike",
+    "Handlebar": "mdi:steering",
+    "Headset": "mdi:circle-double",
+    "Saddle": "mdi:seat",
+    "Seatpost": "mdi:seat",
+    "Shock": "mdi:arrow-collapse-vertical",
+    "Stem": "mdi:steering",
+    "Axel": "mdi:axis-arrow",
+    "Hub": "mdi:circle-slice-8",
+    "Trainer": "mdi:bike-fast",
+    "Tube": "mdi:tire",
+    "PowerMeter": "mdi:flash",
+    "Cleats": "mdi:shoe-cleat",
+    "CyclingShoes": "mdi:shoe-cleat",
+    "Paddle": "mdi:oar",
+    "Computer": "mdi:speedometer",
+    "Light": "mdi:flashlight",
+    "Battery": "mdi:battery",
+    "Accessories": "mdi:bag-personal",
+    "Apparel": "mdi:tshirt-crew",
+}
+
+DEFAULT_ICON = "mdi:cog"
+
+def get_icon_for_type(gear_type: str) -> str:
+    """Get MDI icon for gear type."""
+    return ICON_MAP.get(gear_type, DEFAULT_ICON)
+
+
 async def async_setup_entry(hass, entry, async_add_entities):
     api_key = entry.data[CONF_API_KEY]
     athlete_id = entry.data[CONF_ATHLETE_ID]
@@ -76,13 +135,15 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, gear, gear_by_id):
         super().__init__(coordinator)
         self._gear_id = gear["id"]
+        self._gear_type = gear.get("type", "Gear")
         self._attr_name = f"{gear['name']} Mileage"
         self._attr_unique_id = f"intervals_icu_gear_{gear['id']}"
+        self._attr_icon = get_icon_for_type(self._gear_type)
         self._attr_device_info = {
             "identifiers": {(DOMAIN, gear["id"])},
             "name": gear["name"],
             "manufacturer": "Intervals.icu",
-            "model": gear.get("type", "Gear"),
+            "model": self._gear_type,
             "entry_type": DeviceEntryType.SERVICE,
         }
 
@@ -123,6 +184,7 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, comp, parent_gear):
         super().__init__(coordinator)
         self._comp_id = comp["id"]
+        self._comp_type = comp.get("type", "Component")
         self._parent_gear_id = parent_gear["id"] if parent_gear else None
 
         # Name includes parent gear if attached
@@ -132,6 +194,7 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
             self._attr_name = f"{comp['name']} Mileage"
 
         self._attr_unique_id = f"intervals_icu_component_{comp['id']}"
+        self._attr_icon = get_icon_for_type(self._comp_type)
 
         # If attached to a parent, group under that device; otherwise create standalone device
         if parent_gear:
@@ -147,7 +210,7 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
                 "identifiers": {(DOMAIN, comp["id"])},
                 "name": comp["name"],
                 "manufacturer": "Intervals.icu",
-                "model": comp.get("type", "Component"),
+                "model": self._comp_type,
                 "entry_type": DeviceEntryType.SERVICE,
             }
 
