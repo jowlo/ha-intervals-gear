@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Intervals.icu Gear",
+        "description": "Enter your Intervals.icu API credentials ",
+        "data": {
+          "api_key": "API Key",
+          "athlete_id": "Athlete ID"
+        },
+        "data_description": {
+          "api_key": "Your Intervals.icu API key (found in Settings > Developer Settings)",
+          "athlete_id": "Your athlete ID (e.g., i12345)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This account is already configured"
+    },
+    "error": {
+      "invalid_auth": "Invalid API key or athlete ID",
+      "cannot_connect": "Failed to connect to Intervals.icu"
+    }
+  }
+}
+

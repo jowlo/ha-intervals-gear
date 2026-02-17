@@ -294,7 +294,7 @@ class IntervalsICUEquippedComponentSensor(CoordinatorEntity, SensorEntity):
                 "component_id": comp.get("id"),
                 "component_name": comp.get("name"),
                 "component_type": comp.get("type"),
-            }m
+            }
         return {}
 
     @property
