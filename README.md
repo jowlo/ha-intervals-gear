@@ -61,5 +61,73 @@ data:
 
 > **Tip:** In the Home Assistant UI, you can use the device picker to select your bike and component directly by name.
 
+## Example Lovelace Card
+
+Here's an example dashboard card with gauges for chain and cassette wear, assuming a bike named 'dengfu':
+
+```yaml
+type: vertical-stack
+cards:
+  # Header with bike name and total mileage
+  - type: entities
+    title: Dengfu
+    entities:
+      - entity: sensor.dengfu_mileage_2
+        name: Total Mileage
+        icon: mdi:bike
+
+  # Gauges for chain and cassette wear
+  - type: horizontal-stack
+    cards:
+      - type: gauge
+        entity: sensor.dengfu_chain_mileage
+        name: Chain Wear
+        unit: km
+        min: 0
+        max: 500
+        severity:
+          green: 0
+          yellow: 350
+          red: 450
+        needle: true
+
+      - type: gauge
+        entity: sensor.dengfu_cassette_mileage
+        name: Cassette Wear
+        unit: km
+        min: 0
+        max: 10000
+        severity:
+          green: 0
+          yellow: 7000
+          red: 9000
+        needle: true
+
+  # Component details
+  - type: entities
+    title: Equipped Components
+    entities:
+      - entity: sensor.dengfu_chain
+        name: Chain
+        icon: mdi:link-variant
+      - entity: sensor.dengfu_chain_mileage
+        name: Chain Mileage
+        icon: mdi:counter
+
+      - entity: sensor.dengfu_cassette
+        name: Cassette
+        icon: mdi:cog
+      - entity: sensor.dengfu_cassette_mileage
+        name: Cassette Mileage
+        icon: mdi:counter
+
+      - entity: sensor.dengfu_tyre
+        name: Tyre
+        icon: mdi:tire
+      - entity: sensor.dengfu_tyre_mileage
+        name: Tyre Mileage
+        icon: mdi:counter
+```
+
 ## Issues & Feedback
 Please open issues or feature requests on [GitHub](https://github.com/jowlo/ha-intervals-icu-gear`).
