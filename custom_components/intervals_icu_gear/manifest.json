@@ -1,7 +1,7 @@
 {
   "domain": "intervals_icu_gear",
   "name": "Intervals.icu Gear",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "documentation": "https://github.com/jowlo/ha-intervals-gear",
   "requirements": ["aiohttp>=3.8.0"],
   "dependencies": [],
