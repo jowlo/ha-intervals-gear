@@ -2,19 +2,19 @@ equip_component:
   name: Equip Component
   description: Attach a component (chain, tyre, cassette, etc.) to a bike or other gear.
   fields:
-    bike_entity_id:
+    bike_device_id:
       name: Bike/Gear
       description: The bike or gear to attach the component to.
       required: true
       selector:
-        entity:
+        device:
           integration: intervals_icu_gear
-    component_entity_id:
+    component_device_id:
       name: Component
       description: The component to attach (e.g., chain, tyre, cassette).
       required: true
       selector:
-        entity:
+        device:
           integration: intervals_icu_gear
     exclusive:
       name: Exclusive
@@ -23,4 +23,3 @@ equip_component:
       default: false
       selector:
         boolean:
-

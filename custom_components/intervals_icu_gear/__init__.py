@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from .const import CONF_API_KEY, CONF_ATHLETE_ID, DOMAIN
 from .api import IntervalsICUClient
 import logging
@@ -14,8 +14,8 @@ _LOGGER = logging.getLogger(__name__)
 EQUIP_SERVICE = "equip_component"
 
 EQUIP_SCHEMA = vol.Schema({
-    vol.Required("bike_entity_id"): cv.entity_id,
-    vol.Required("component_entity_id"): cv.entity_id,
+    vol.Required("bike_device_id"): cv.string,
+    vol.Required("component_device_id"): cv.string,
     vol.Optional("exclusive", default=False): bool,
 })
 
@@ -32,19 +32,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         api_key = entry.data[CONF_API_KEY]
         athlete_id = entry.data[CONF_ATHLETE_ID]
 
-        bike_entity_id = call.data["bike_entity_id"]
-        component_entity_id = call.data["component_entity_id"]
+        bike_device_id = call.data["bike_device_id"]
+        component_device_id = call.data["component_device_id"]
         exclusive = call.data.get("exclusive", False)
 
-        # Resolve entity_id to gear name or id using state attributes
-        bike_state = hass.states.get(bike_entity_id)
-        comp_state = hass.states.get(component_entity_id)
-        if not bike_state or not comp_state:
-            raise ValueError("Bike or component entity not found")
-        bike_gear_id = bike_state.attributes.get("gear_id")
-        comp_gear_id = comp_state.attributes.get("gear_id")
+        # Get device registry to resolve device IDs to gear IDs
+        device_reg = dr.async_get(hass)
+
+        bike_device = device_reg.async_get(bike_device_id)
+        comp_device = device_reg.async_get(component_device_id)
+
+        if not bike_device or not comp_device:
+            raise ValueError("Bike or component device not found")
+
+        # Extract gear_id from device identifiers
+        # Identifiers are stored as {(DOMAIN, gear_id)}
+        bike_gear_id = None
+        comp_gear_id = None
+
+        for domain, identifier in bike_device.identifiers:
+            if domain == DOMAIN:
+                bike_gear_id = identifier
+                break
+
+        for domain, identifier in comp_device.identifiers:
+            if domain == DOMAIN:
+                comp_gear_id = identifier
+                break
+
         if not bike_gear_id or not comp_gear_id:
-            raise ValueError("Could not resolve gear IDs from entity attributes")
+            raise ValueError("Could not resolve gear IDs from device identifiers")
+
         client = IntervalsICUClient(api_key, athlete_id)
         # 1. Fetch all gear
         gear_list = await client.async_get_gear()
