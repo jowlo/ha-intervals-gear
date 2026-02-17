@@ -1,0 +1,10 @@
+{
+  "name": "Intervals.icu Gear Integration",
+  "content_in_root": false,
+  "domains": ["sensor"],
+  "country": ["global"],
+  "homeassistant": ">=2023.0.0",
+  "iot_class": "cloud_polling",
+  "codeowners": ["@your-github-username"]
+}
+

@@ -1,0 +1,10 @@
+{
+  "domain": "intervals_icu_gear",
+  "name": "Intervals.icu Gear",
+  "version": "0.1.0",
+  "documentation": "https://github.com/jowlo/ha-intervals-icu-gear",
+  "requirements": ["aiohttp>=3.8.0"],
+  "dependencies": [],
+  "codeowners": ["@jowlo"]
+}
+
