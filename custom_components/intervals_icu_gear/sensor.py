@@ -1,8 +1,8 @@
+from datetime import timedelta
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.const import CONF_API_KEY
-from .const import DOMAIN, CONF_ATHLETE_ID
+from .const import DOMAIN, CONF_API_KEY, CONF_ATHLETE_ID
 from .api import IntervalsICUClient
 import logging
 
@@ -21,7 +21,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         _LOGGER,
         name="intervals_icu_gear",
         update_method=async_update_data,
-        update_interval=hass.config.time_zone or 3600,
+        update_interval=timedelta(hours=1),
     )
     await coordinator.async_config_entry_first_refresh()
 
@@ -44,12 +44,16 @@ class IntervalsICUBikeSensor(CoordinatorEntity, Entity):
         self._attr_name = f"{gear['name']} Mileage"
         self._attr_unique_id = f"intervals_icu_bike_{gear['id']}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, gear["id"] )},
+            "identifiers": {(DOMAIN, gear["id"])},
             "name": gear["name"],
             "manufacturer": "Intervals.icu",
             "model": gear.get("type", "Bike"),
             "entry_type": DeviceEntryType.SERVICE,
         }
+
+    @property
+    def extra_state_attributes(self):
+        return {"gear_id": self.gear["id"]}
 
     @property
     def state(self):
@@ -67,12 +71,16 @@ class IntervalsICUComponentSensor(CoordinatorEntity, Entity):
         self._attr_name = f"{bike['name']} - {comp['name']} Mileage"
         self._attr_unique_id = f"intervals_icu_component_{comp['id']}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, bike["id"] )},
+            "identifiers": {(DOMAIN, bike["id"])},
             "name": bike["name"],
             "manufacturer": "Intervals.icu",
             "model": bike.get("type", "Bike"),
             "entry_type": DeviceEntryType.SERVICE,
         }
+
+    @property
+    def extra_state_attributes(self):
+        return {"gear_id": self.comp["id"]}
 
     @property
     def state(self):
@@ -81,18 +89,3 @@ class IntervalsICUComponentSensor(CoordinatorEntity, Entity):
     @property
     def unit_of_measurement(self):
         return "km"
-import aiohttp
-
-class IntervalsICUClient:
-    def __init__(self, api_key: str, athlete_id: str):
-        self.api_key = api_key
-        self.athlete_id = athlete_id
-        self.base_url = "https://intervals.icu/api/v1/athlete/{}/gear.json".format(athlete_id)
-
-    async def async_get_gear(self):
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.base_url, headers=headers) as resp:
-                resp.raise_for_status()
-                return await resp.json()
-

@@ -4,12 +4,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
-from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from .const import CONF_API_KEY, CONF_ATHLETE_ID, DOMAIN
 from .api import IntervalsICUClient
 
-DOMAIN = "intervals_icu_gear"
 EQUIP_SERVICE = "equip_component"
 
 EQUIP_SCHEMA = vol.Schema({
@@ -22,11 +20,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
 
-    @callback
     async def async_equip_component_service(call):
         api_key = entry.data[CONF_API_KEY]
         athlete_id = entry.data[CONF_ATHLETE_ID]
@@ -40,8 +35,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         comp_state = hass.states.get(component_entity_id)
         if not bike_state or not comp_state:
             raise ValueError("Bike or component entity not found")
-        bike_gear_id = bike_state.attributes.get("unique_id") or bike_state.attributes.get("gear_id") or bike_state.attributes.get("id")
-        comp_gear_id = comp_state.attributes.get("unique_id") or comp_state.attributes.get("gear_id") or comp_state.attributes.get("id")
+        bike_gear_id = bike_state.attributes.get("gear_id")
+        comp_gear_id = comp_state.attributes.get("gear_id")
         if not bike_gear_id or not comp_gear_id:
             raise ValueError("Could not resolve gear IDs from entity attributes")
         client = IntervalsICUClient(api_key, athlete_id)
@@ -83,4 +78,4 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    return await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    return await hass.config_entries.async_unload_platforms(entry, ["sensor"])
