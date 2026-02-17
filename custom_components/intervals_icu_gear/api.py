@@ -1,5 +1,8 @@
 import aiohttp
 from aiohttp import BasicAuth
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 class IntervalsICUClient:
     def __init__(self, api_key: str, athlete_id: str):
@@ -9,11 +12,17 @@ class IntervalsICUClient:
         self.auth = BasicAuth("API_KEY", api_key)
 
     async def async_get_gear(self):
-        url = f"{self.base_url}/gear.json"
+        url = f"{self.base_url}/gear"
+        _LOGGER.debug("Fetching gear from: %s", url)
         async with aiohttp.ClientSession(auth=self.auth) as session:
             async with session.get(url) as resp:
+                _LOGGER.debug("API response status: %s", resp.status)
+                if resp.status == 401:
+                    _LOGGER.error("Authentication failed - check your API key and athlete ID")
                 resp.raise_for_status()
-                return await resp.json()
+                data = await resp.json()
+                _LOGGER.debug("API returned %d gear items", len(data) if data else 0)
+                return data
 
     async def async_update_bike_components(self, bike_id: str, component_ids: list):
         url = f"{self.base_url}/gear/{bike_id}"

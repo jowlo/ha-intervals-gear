@@ -1,13 +1,11 @@
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_API_KEY
-from .const import DOMAIN, CONF_ATHLETE_ID
+from .const import DOMAIN, CONF_API_KEY, CONF_ATHLETE_ID
 
 class IntervalsICUGearConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Intervals.icu Gear."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -22,4 +20,3 @@ class IntervalsICUGearConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
         )
-
