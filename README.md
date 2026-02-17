@@ -72,7 +72,7 @@ cards:
   - type: entities
     title: Dengfu
     entities:
-      - entity: sensor.dengfu_mileage_2
+      - entity: sensor.dengfu_mileage
         name: Total Mileage
         icon: mdi:bike
 
@@ -121,11 +121,19 @@ cards:
         name: Cassette Mileage
         icon: mdi:counter
 
-      - entity: sensor.dengfu_tyre
-        name: Tyre
+      # Tyres are numbered when multiple exist
+      - entity: sensor.dengfu_tyre_1
+        name: Tyre 1
         icon: mdi:tire
-      - entity: sensor.dengfu_tyre_mileage
-        name: Tyre Mileage
+      - entity: sensor.dengfu_tyre_1_mileage
+        name: Tyre 1 Mileage
+        icon: mdi:counter
+
+      - entity: sensor.dengfu_tyre_2
+        name: Tyre 2
+        icon: mdi:tire
+      - entity: sensor.dengfu_tyre_2_mileage
+        name: Tyre 2 Mileage
         icon: mdi:counter
 ```
 

@@ -103,11 +103,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     entities = []
 
-    # Collect all component types that exist
-    component_types = set()
-    for gear in coordinator.data:
-        if gear.get("component", False):
-            component_types.add(gear.get("type"))
+    # Build a lookup of all gear by ID
+    gear_by_id = {g["id"]: g for g in coordinator.data}
 
     for gear in coordinator.data:
         is_component = gear.get("component", False)
@@ -119,13 +116,35 @@ async def async_setup_entry(hass, entry, async_add_entities):
             # Create mileage entity for main gear (bikes, shoes, etc.)
             entities.append(IntervalsICUGearMileageSensor(coordinator, gear))
 
-            # For bikes, create sensors for each component type
+            # For bikes, create sensors for each equipped component
             if gear.get("type") == "Bike":
-                for comp_type in component_types:
-                    # Sensor showing equipped component name
-                    entities.append(IntervalsICUEquippedComponentSensor(coordinator, gear, comp_type))
-                    # Sensor showing equipped component mileage
-                    entities.append(IntervalsICUEquippedComponentMileageSensor(coordinator, gear, comp_type))
+                component_ids = gear.get("component_ids") or []
+
+                # Group components by type to determine if numbering is needed
+                components_by_type = {}
+                for comp_id in component_ids:
+                    comp = gear_by_id.get(comp_id)
+                    if comp:
+                        comp_type = comp.get("type", "Component")
+                        if comp_type not in components_by_type:
+                            components_by_type[comp_type] = []
+                        components_by_type[comp_type].append(comp)
+
+                # Create sensors with numbered suffixes only when multiple of same type
+                for comp_type, comps in components_by_type.items():
+                    # Sort by ID for consistent slot assignment
+                    comps.sort(key=lambda c: c.get("id", ""))
+                    needs_numbering = len(comps) > 1
+                    for idx, comp in enumerate(comps, start=1):
+                        suffix = f"_{idx}" if needs_numbering else ""
+                        # Sensor showing equipped component name
+                        entities.append(IntervalsICUEquippedComponentSensor(
+                            coordinator, gear, comp, comp_type, suffix, idx
+                        ))
+                        # Sensor showing equipped component mileage
+                        entities.append(IntervalsICUEquippedComponentMileageSensor(
+                            coordinator, gear, comp, comp_type, suffix, idx
+                        ))
         else:
             # Create entity for components (chains, tyres, cassettes, etc.)
             entities.append(IntervalsICUComponentSensor(coordinator, gear))
@@ -217,14 +236,17 @@ class IntervalsICUEquippedComponentSensor(CoordinatorEntity, SensorEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, gear, component_type):
+    def __init__(self, coordinator, gear, component, comp_type, suffix, slot_index):
         super().__init__(coordinator)
         self._gear_id = gear["id"]
         self._gear_name = gear.get("name", "Unknown")
         self._gear_type = gear.get("type", "Gear")
-        self._component_type = component_type
-        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{component_type}"
-        self._attr_icon = get_icon_for_type(component_type)
+        self._component_type = comp_type
+        self._slot_index = slot_index  # Which slot (1, 2, etc.) for this type
+        self._suffix = suffix
+        # Unique ID based on gear, component TYPE and slot - not the actual component ID
+        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{comp_type}{suffix}"
+        self._attr_icon = get_icon_for_type(self._component_type)
 
     @property
     def _gear(self):
@@ -234,17 +256,24 @@ class IntervalsICUEquippedComponentSensor(CoordinatorEntity, SensorEntity):
         return {}
 
     def _get_equipped_component(self):
-        """Get the equipped component of this type."""
+        """Get the equipped component at this slot."""
         gear = self._gear
         component_ids = gear.get("component_ids") or []
+        # Find all components of this type equipped on this bike
+        matching_comps = []
         for g in self.coordinator.data or []:
             if g["id"] in component_ids and g.get("type") == self._component_type:
-                return g
+                matching_comps.append(g)
+        # Sort by ID for consistent slot assignment
+        matching_comps.sort(key=lambda c: c.get("id", ""))
+        # Return the component at this slot index (1-based)
+        if self._slot_index <= len(matching_comps):
+            return matching_comps[self._slot_index - 1]
         return None
 
     @property
     def name(self):
-        return f"{self._component_type}"
+        return f"{self._component_type}{self._suffix}"
 
     @property
     def device_info(self):
@@ -263,8 +292,9 @@ class IntervalsICUEquippedComponentSensor(CoordinatorEntity, SensorEntity):
         if comp:
             return {
                 "component_id": comp.get("id"),
+                "component_name": comp.get("name"),
                 "component_type": comp.get("type"),
-            }
+            }m
         return {}
 
     @property
@@ -283,14 +313,17 @@ class IntervalsICUEquippedComponentMileageSensor(CoordinatorEntity, SensorEntity
     _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, gear, component_type):
+    def __init__(self, coordinator, gear, component, comp_type, suffix, slot_index):
         super().__init__(coordinator)
         self._gear_id = gear["id"]
         self._gear_name = gear.get("name", "Unknown")
         self._gear_type = gear.get("type", "Gear")
-        self._component_type = component_type
-        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{component_type}_mileage"
-        self._attr_icon = get_icon_for_type(component_type)
+        self._component_type = comp_type
+        self._slot_index = slot_index
+        self._suffix = suffix
+        # Unique ID based on gear, component TYPE and slot - not the actual component ID
+        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{comp_type}{suffix}_mileage"
+        self._attr_icon = get_icon_for_type(self._component_type)
 
     @property
     def _gear(self):
@@ -300,17 +333,24 @@ class IntervalsICUEquippedComponentMileageSensor(CoordinatorEntity, SensorEntity
         return {}
 
     def _get_equipped_component(self):
-        """Get the equipped component of this type."""
+        """Get the equipped component at this slot."""
         gear = self._gear
         component_ids = gear.get("component_ids") or []
+        # Find all components of this type equipped on this bike
+        matching_comps = []
         for g in self.coordinator.data or []:
             if g["id"] in component_ids and g.get("type") == self._component_type:
-                return g
+                matching_comps.append(g)
+        # Sort by ID for consistent slot assignment
+        matching_comps.sort(key=lambda c: c.get("id", ""))
+        # Return the component at this slot index (1-based)
+        if self._slot_index <= len(matching_comps):
+            return matching_comps[self._slot_index - 1]
         return None
 
     @property
     def name(self):
-        return f"{self._component_type} Mileage"
+        return f"{self._component_type}{self._suffix} Mileage"
 
     @property
     def device_info(self):
