@@ -103,6 +103,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     entities = []
 
+    # Collect all component types that exist
+    component_types = set()
+    for gear in coordinator.data:
+        if gear.get("component", False):
+            component_types.add(gear.get("type"))
+
     for gear in coordinator.data:
         is_component = gear.get("component", False)
 
@@ -110,8 +116,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
                       gear.get("name"), gear.get("type"), is_component)
 
         if not is_component:
-            # Create entity for main gear (bikes, shoes, etc.)
-            entities.append(IntervalsICUGearSensor(coordinator, gear))
+            # Create mileage entity for main gear (bikes, shoes, etc.)
+            entities.append(IntervalsICUGearMileageSensor(coordinator, gear))
+
+            # For bikes, create sensors for each component type
+            if gear.get("type") == "Bike":
+                for comp_type in component_types:
+                    # Sensor showing equipped component name
+                    entities.append(IntervalsICUEquippedComponentSensor(coordinator, gear, comp_type))
+                    # Sensor showing equipped component mileage
+                    entities.append(IntervalsICUEquippedComponentMileageSensor(coordinator, gear, comp_type))
         else:
             # Create entity for components (chains, tyres, cassettes, etc.)
             entities.append(IntervalsICUComponentSensor(coordinator, gear))
@@ -120,8 +134,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for main gear (bikes, shoes, etc.)."""
+class IntervalsICUGearMileageSensor(CoordinatorEntity, SensorEntity):
+    """Mileage sensor for main gear (bikes, shoes, etc.)."""
 
     _attr_device_class = SensorDeviceClass.DISTANCE
     _attr_state_class = SensorStateClass.TOTAL
@@ -133,9 +147,8 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
         self._gear_id = gear["id"]
         self._gear_type = gear.get("type", "Gear")
         self._gear_name = gear.get("name", "Unknown")
-        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}"
+        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_mileage"
         self._attr_icon = get_icon_for_type(self._gear_type)
-        self._attr_translation_key = "mileage"
 
     @property
     def _gear(self):
@@ -146,23 +159,26 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
         return {}
 
     def _get_equipped_components(self):
-        """Get list of components equipped to this gear."""
+        """Get list of equipped components with their details."""
         gear = self._gear
         component_ids = gear.get("component_ids") or []
         components = []
         for g in self.coordinator.data or []:
             if g["id"] in component_ids:
-                components.append({"id": g["id"], "name": g.get("name"), "type": g.get("type")})
+                components.append({
+                    "id": g["id"],
+                    "name": g.get("name"),
+                    "type": g.get("type"),
+                    "distance_km": round(g.get("distance", 0) / 1000, 1) if g.get("distance") else None,
+                })
         return components
 
     @property
     def name(self):
-        """Return sensor name."""
         return "Mileage"
 
     @property
     def device_info(self):
-        """Return device info."""
         gear = self._gear
         return {
             "identifiers": {(DOMAIN, self._gear_id)},
@@ -176,25 +192,162 @@ class IntervalsICUGearSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         gear = self._gear
         equipped = self._get_equipped_components()
+        # Build a dict of component type -> name for easy reference
+        equipped_by_type = {c["type"]: c["name"] for c in equipped}
         return {
             "gear_id": gear.get("id"),
             "gear_type": gear.get("type"),
             "activities": gear.get("activities"),
             "time_seconds": gear.get("time"),
+            "component_ids": gear.get("component_ids") or [],
             "equipped_components": equipped,
+            "equipped_by_type": equipped_by_type,
         }
 
     @property
     def native_value(self):
-        """Return distance in km (API returns meters)."""
         distance = self._gear.get("distance")
         if distance is not None:
             return round(distance / 1000, 1)
         return None
 
 
+class IntervalsICUEquippedComponentSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the name of the equipped component of a specific type on a bike."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, gear, component_type):
+        super().__init__(coordinator)
+        self._gear_id = gear["id"]
+        self._gear_name = gear.get("name", "Unknown")
+        self._gear_type = gear.get("type", "Gear")
+        self._component_type = component_type
+        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{component_type}"
+        self._attr_icon = get_icon_for_type(component_type)
+
+    @property
+    def _gear(self):
+        for g in self.coordinator.data or []:
+            if g["id"] == self._gear_id:
+                return g
+        return {}
+
+    def _get_equipped_component(self):
+        """Get the equipped component of this type."""
+        gear = self._gear
+        component_ids = gear.get("component_ids") or []
+        for g in self.coordinator.data or []:
+            if g["id"] in component_ids and g.get("type") == self._component_type:
+                return g
+        return None
+
+    @property
+    def name(self):
+        return f"{self._component_type}"
+
+    @property
+    def device_info(self):
+        gear = self._gear
+        return {
+            "identifiers": {(DOMAIN, self._gear_id)},
+            "name": gear.get("name", self._gear_name),
+            "manufacturer": "Intervals.icu",
+            "model": gear.get("type", self._gear_type),
+            "entry_type": DeviceEntryType.SERVICE,
+        }
+
+    @property
+    def extra_state_attributes(self):
+        comp = self._get_equipped_component()
+        if comp:
+            return {
+                "component_id": comp.get("id"),
+                "component_type": comp.get("type"),
+            }
+        return {}
+
+    @property
+    def native_value(self):
+        comp = self._get_equipped_component()
+        if comp:
+            return comp.get("name")
+        return None
+
+
+class IntervalsICUEquippedComponentMileageSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing the mileage of the equipped component of a specific type on a bike."""
+
+    _attr_device_class = SensorDeviceClass.DISTANCE
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator, gear, component_type):
+        super().__init__(coordinator)
+        self._gear_id = gear["id"]
+        self._gear_name = gear.get("name", "Unknown")
+        self._gear_type = gear.get("type", "Gear")
+        self._component_type = component_type
+        self._attr_unique_id = f"intervals_icu_gear_{gear['id']}_equipped_{component_type}_mileage"
+        self._attr_icon = get_icon_for_type(component_type)
+
+    @property
+    def _gear(self):
+        for g in self.coordinator.data or []:
+            if g["id"] == self._gear_id:
+                return g
+        return {}
+
+    def _get_equipped_component(self):
+        """Get the equipped component of this type."""
+        gear = self._gear
+        component_ids = gear.get("component_ids") or []
+        for g in self.coordinator.data or []:
+            if g["id"] in component_ids and g.get("type") == self._component_type:
+                return g
+        return None
+
+    @property
+    def name(self):
+        return f"{self._component_type} Mileage"
+
+    @property
+    def device_info(self):
+        gear = self._gear
+        return {
+            "identifiers": {(DOMAIN, self._gear_id)},
+            "name": gear.get("name", self._gear_name),
+            "manufacturer": "Intervals.icu",
+            "model": gear.get("type", self._gear_type),
+            "entry_type": DeviceEntryType.SERVICE,
+        }
+
+    @property
+    def extra_state_attributes(self):
+        comp = self._get_equipped_component()
+        if comp:
+            return {
+                "component_id": comp.get("id"),
+                "component_name": comp.get("name"),
+                "component_type": comp.get("type"),
+                "activities": comp.get("activities"),
+                "time_seconds": comp.get("time"),
+            }
+        return {}
+
+    @property
+    def native_value(self):
+        comp = self._get_equipped_component()
+        if comp:
+            distance = comp.get("distance")
+            if distance is not None:
+                return round(distance / 1000, 1)
+        return None
+
+
 class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
-    """Sensor for components (chains, tyres, cassettes, etc.)."""
+    """Mileage sensor for components (chains, tyres, cassettes, etc.)."""
 
     _attr_device_class = SensorDeviceClass.DISTANCE
     _attr_state_class = SensorStateClass.TOTAL
@@ -206,13 +359,11 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
         self._comp_id = comp["id"]
         self._comp_type = comp.get("type", "Component")
         self._comp_name = comp.get("name", "Unknown")
-        self._attr_unique_id = f"intervals_icu_component_{comp['id']}"
+        self._attr_unique_id = f"intervals_icu_component_{comp['id']}_mileage"
         self._attr_icon = get_icon_for_type(self._comp_type)
-        self._attr_translation_key = "mileage"
 
     @property
     def _comp(self):
-        """Get current component data from coordinator."""
         for g in self.coordinator.data or []:
             if g["id"] == self._comp_id:
                 return g
@@ -229,12 +380,10 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def name(self):
-        """Return sensor name."""
         return "Mileage"
 
     @property
     def device_info(self):
-        """Return device info - component is always its own device."""
         comp = self._comp
         return {
             "identifiers": {(DOMAIN, self._comp_id)},
@@ -260,7 +409,6 @@ class IntervalsICUComponentSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        """Return distance in km (API returns meters)."""
         distance = self._comp.get("distance")
         if distance is not None:
             return round(distance / 1000, 1)
